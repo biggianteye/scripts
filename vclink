@@ -1,0 +1,68 @@
+#!/bin/bash
+#set -x
+
+# Small script to create a github link from the current working directory.
+# Adapted from an older script which worked for CVS and ViewVC.
+# Run with 'vclink --help' for usage
+
+# TODO:
+# - Deal with non-cloned repos.
+# - Deal with non-github repos.
+
+set -u
+
+# No params or help flag = show usage
+if [[ $# = 0 || ( $# = 1 && ($1 = "-h" || $1 = "--help") ) ]]
+then
+    echo "Usage $(basename $0): Create a github link from the current repository.
+
+Example:
+
+   $ cd \$GITREPO/path
+   $ vclink to/file.txt
+
+    https://github.com/username/reponame/blob/branchname/path/to/file.txt
+
+"
+        exit 1
+fi
+
+# Is this a valid git repo?
+if git rev-parse --git-dir > /dev/null 2>&1; then
+    : # It is
+else
+    echo "[ERROR] Not in a git repository." > /dev/stderr
+    exit 1
+fi
+
+# The path given may be relative to some non-root directory, so let's construct the whole path
+readonly path=$1
+git_base_dir=$(git rev-parse --show-toplevel)
+basedir_in_repo=${PWD#${git_base_dir}}
+full_path="${basedir_in_repo}/${path}"
+
+# Does the given path actually exist?
+if [[ ! -f $path && ! -d $path ]]
+then
+    echo "[ERROR] '$full_path' does not exist." > /dev/stderr
+    exit 1
+fi
+
+# Special case: the current directory. Just chop that off the constructed file path.
+if [[ $path == "." ]]
+then
+    full_path=$basedir_in_repo
+fi
+
+# What's the repository name? ie. user/repo
+repo_url=$(git config --get remote.origin.url)
+repo_name=${repo_url##*:}
+repo_name=${repo_name%.*}
+
+# What branch are we on?
+branch=$(git rev-parse --abbrev-ref HEAD)
+
+# Now that we have all that, let's build up the whole URL
+full_url="https://github.com/${repo_name}/blob/${branch}${full_path}"
+
+echo $full_url
